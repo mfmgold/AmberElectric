@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Anton" />
+    <style>
+        .analog-clock {
+            font-family: "Anton";
+            font-size: 40px;
+            width: 500px;
+            height: 500px;
+            text-align: center;
+        }
+        
+        #clock-face {
+            stroke: black;
+            stroke-width: 2px;
+            fill: white;
+        }
+        
+        #hour-face {
+            stroke: black;
+            stroke-width: 2px;
+            fill: black;
+        }
+        
+        .clock-text {
+            font-family: "Anton";
+            font-size: 40px;
+            text-align: center;
+        }
+        
+        .footer-text {
+            font-family: "Arial";
+            font-size: 14px;
+            text-align: center;
+        }
+    </style>
+
+    <script>
+        var triggerPriceLookup = 60; //Check for prices every one minute only. 
+
+        function clock() {
+
+            //calculate angle
+            var d, h, m, s;
+            d = new Date();
+
+            //display time
+            h = d.getHours();
+            m = d.getMinutes();
+            s = d.getSeconds();
+
+            if (h >= 12) {
+                setText("suffix", "PM");
+            } else {
+                setText("suffix", "AM");
+            }
+
+            if (h != 12) {
+                h %= 12;
+            }
+
+            setText('sec', s);
+            setText("min", m);
+            setText("hr", h);
+
+            var k = h % 12;
+            document.getElementById("hour-at" + k + "p").style.fill = "tomato";
+            document.getElementById("hour-at" + k + "p").setAttributeNS(null, 'r', 10);
+            // var pj = j;
+            // var j = Math.round(m / 5);
+            // document.getElementById("hour-at" + pj + "p").style.fill = "white";
+            // document.getElementById("hour-at" + pj + "p").setAttributeNS(null, 'r', 7);
+            // document.getElementById("hour-at" + j + "p").style.fill = "purple";
+            // document.getElementById("hour-at" + j + "p").setAttributeNS(null, 'r', 7);
+
+            triggerPriceLookup += 1;
+            if (triggerPriceLookup > 60) {
+                myFunction();
+            }
+
+            //call every second
+            setTimeout(clock, 1000);
+        }
+
+
+        function setText(id, val) {
+            if (val < 10) {
+                val = "0" + val;
+            }
+            document.getElementById(id).innerHTML = val;
+        }
+
+
+        window.onload = clock;
+
+
+        function myFunction() {
+
+            const url = 'https://api.amberelectric.com.au/prices/listprices';
+
+            function getUrlVars() {
+                var vars = {};
+                var parts = window.location.href.replace(/[?&]+([^=&]+)=([^&]*)/gi, function(m, key, value) {
+                    vars[key] = value;
+                });
+                return vars;
+            }
+
+            function getUrlParam(parameter, defaultvalue) {
+                var urlparameter = defaultvalue;
+                if (window.location.href.indexOf(parameter) > -1) {
+                    urlparameter = getUrlVars()[parameter];
+                }
+                return urlparameter;
+            }
+
+            var locPostCode = getUrlParam('postcode', '3752');
+
+            // var locPostCode = '3752';
+            // post body data
+            const location = {
+                postcode: locPostCode
+            };
+
+            document.getElementById('location').innerHTML = 'PostCode - ' + locPostCode;
+
+            //request options
+            const options = {
+                method: 'POST',
+                body: JSON.stringify(location),
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            }
+
+            var http = new XMLHttpRequest();
+
+            http.open('POST', url, true);
+
+            //Send the proper header information along with the request
+            http.setRequestHeader('Content-type', 'application/json');
+
+            http.onreadystatechange = function() { //Call a function when the state changes.
+                if (http.readyState == 4 && http.status == 200) {
+                    //alert(http.responseText);
+                    var jsondata = JSON.parse(http.responseText);
+
+                    //document.getElementById("demo").innerHTML =  JSON.stringify(jsondata);
+
+                    //get current dateteime
+                    Date.prototype.addHours = function(h) {
+                        this.setHours(this.getHours() + h);
+                        return this;
+                    }
+
+                    function GetPeriod(date, hourly) {
+                        var m = date.getMinutes();
+                        var h = date.getHours();
+                        var Y = date.getFullYear();
+                        var M = date.getMonth() + 1;
+                        var D = date.getDate();
+                        if (hourly) {
+                            m = '30';
+                        } else if (m > 29) {
+                            h = (h + 1) % 24;
+                            m = '00';
+                        } else {
+                            m = '30';
+                        }
+                        h = h.toString().padStart(2, '0');
+                        M = M.toString().padStart(2, '0');
+                        D = D.toString().padStart(2, '0');
+                        var period = Y + '-' + M + '-' + D + 'T' + h + ':' + m + ':00';
+
+                        return period;
+
+                    }
+
+                    var d = new Date();
+                    var periodString;
+
+                    //get the fixed prices. 
+                    var fixedPrice = parseFloat(jsondata.data.staticPrices.E1.totalfixedKWHPrice);
+                    var lossFactor = parseFloat(jsondata.data.staticPrices.E1.lossFactor);
+                    var solarFixedPrice = parseFloat(jsondata.data.staticPrices.B1.totalfixedKWHPrice);
+                    var solarLossFactor = parseFloat(jsondata.data.staticPrices.B1.lossFactor);
+
+                    var wholesaleKWHPrice = new Array();
+                    var usagePrice = new Array();
+                    var color = new Array();
+
+                    var wholesalePrices = jsondata.data.variablePricesAndRenewables;
+                    for (i = 0; i < 12; i++) {
+                        d = new Date();
+                        periodString = GetPeriod(d.addHours(i), i);
+
+                        for (cnt = 0; cnt < 80; cnt++) {
+
+                            if (wholesalePrices[cnt].period == periodString) {
+                                wholesaleKWHPrice[i] = parseFloat(wholesalePrices[cnt].wholesaleKWHPrice);
+                                usagePrice[i] = Math.round(fixedPrice + lossFactor * wholesaleKWHPrice[i]);
+                                color[i] = GetColor(wholesaleKWHPrice[i]);
+                                break;
+                            }
+
+                        }
+
+                    }
+
+
+                    // var usagePrice = Math.round(fixedPrice + lossFactor * wholesaleKWHPrice);
+                    var solarPrice = Math.round(solarFixedPrice - solarLossFactor * wholesaleKWHPrice[0]);
+
+                    function GetColor(wprice) {
+                        var color = "";
+                        if (wprice <= 8) {
+                            color = "green";
+                        } else if (wprice > 8 && wprice <= 14) {
+                            color = "darkorange";
+                        } else {
+                            color = "red";
+                        }
+                        return color;
+                    }
+
+                    var statement = "";
+                    // var color = "";
+                    if (color[0] == "green") {
+                        statement = "It's cheap to use energy now. ";
+                    } else if (color[0] == "darkorange") {
+                        statement = "It's expensive to use energy now. ";
+                    } else {
+                        statement = "It's very expensive to use energy now. ";
+                    }
+
+                    document.getElementById("statement").innerHTML = statement;
+                    document.getElementById("statement").style.color = color[0];
+                    document.getElementById("solarcurrentprice").innerHTML = solarPrice + '¢' + ' feed in';
+
+                    d = new Date();
+                    var currentHour = d.getHours() % 12;
+                    var k;
+
+                    if (usagePrice[0] < 10) {
+                        document.getElementById("currentprice").setAttributeNS(null, 'x', 175);
+                    }
+                    document.getElementById("currentprice").innerHTML = usagePrice[0] + '¢';
+                    document.getElementById("currentprice").style.fill = color[0];
+                    for (i = 0; i < 12; i++) {
+                        k = (i + currentHour) % 12;
+                        document.getElementById("at" + k + "p").innerHTML = usagePrice[i] + '¢';
+                        document.getElementById("at" + k + "p").style.fill = color[i];
+                    }
+
+
+
+                    triggerPriceLookup = 0; //Reset - Check for prices every one minute only. 
+
+                }
+            }
+
+            http.send(JSON.stringify(location));
+
+        }
+    </script>
+</head>
+
+<body>
+    <div class="analog-clock">
+
+        <div class="all-text">
+
+            <h1 style="font-size: 40px;">Amber Electric - Live Prices</h1>
+            <h2 id="location" style="font-size: 20px;">PostCode - XXXX</h2>
+            <h3 id="statement" style="color: red; font-size: 34px;">It's cheap to use energy now.</h3>
+
+        </div>
+        <div class="clock-text">
+
+            <span id="hr">00</span>
+            <span>:</span>
+            <span id="min">00</span>
+            <span>:</span>
+            <span id="sec">00</span>
+            <span id="suffix">--</span>
+
+        </div>
+
+        <svg width="500" height="500">
+                <circle id="clock-face" cx="250" cy="250" r="240" />
+
+                <text id="at0p" x="225" y="55" >12</text>
+                <circle id="hour-at0p" cx="250" cy="75" r="10" fill= white />
+                
+                <text id="at1p" x="330" y="85" >01</text>
+                <circle id="hour-at1p" cx="330" cy="105" r="10" fill= white />
+                
+                <text id="at2p" x="395" y="150">02</text>
+                <circle id="hour-at2p" cx="375" cy="150" r="10" fill= white />
+                
+                <text id="at3p" x="430" y="250">03</text>
+                <circle id="hour-at3p" cx="410" cy="240" r="10" fill= white />
+                
+                <text id="at4p" x="405" y="360">04</text>
+                <circle id="hour-at4p" cx="390" cy="340" r="10" fill= white />
+                
+                <text id="at5p" x="325" y="440">05</text>
+                <circle id="hour-at5p" cx="310" cy="400" r="10" fill= white />
+                
+                <text id="at6p" x="225" y="475">06</text>
+                <circle id="hour-at6p" cx="250" cy="425" r="10" fill= white />
+                
+                <text id="at7p" x="120" y="440">07</text>
+                <circle id="hour-at7p" cx="160" cy="390" r="10" fill= white />
+                
+                <text id="at8p" x="40" y="360">08</text>
+                <circle id="hour-at8p" cx="115" cy="340" r="10" fill= white />
+                
+                <text id="at9p" x="20" y="250">09</text>
+                <circle id="hour-at9p" cx="100" cy="240" r="10" fill= white />
+                
+                <text id="at10p" x="50" y="150">10</text>
+                <circle id="hour-at10p" cx="125" cy="150" r="10" fill= white />
+                
+                <text id="at11p" x="120" y="85">11</text>
+                <circle id="hour-at11p" cx="175" cy="105" r="10" fill= white />
+
+                <text id="currentprice" x="150" y="285" fill="green" style="font-size: 150px;">88c</text>
+                <text id="solarcurrentprice" x="150" y="340" fill="tomato" style="font-size: 50px;">88c</text>
+            </svg>
+
+
+
+        <div class="footer-text">
+
+            <p style="font-size: 14px;">Prices are updated every minute.</p>
+            <p style="font-size: 14px;">Prices are in ¢/Kwh.</p>
+            <p style="font-size: 14px;">Price are obtained from AmberElectric api.</p>
+            <p style="font-size: 14px;">Disclaimer : Site owner holds no responsbiility for the data displayed,</p>
+            <p style="font-size: 14px;">Use information at your own risk.</p>
+
+
+        </div>
+    </div>
+</body>
+
+</html>
